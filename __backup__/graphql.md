@@ -1,6 +1,8 @@
+# React Router v7 | GraphQLサーバー実装方法
+
 React Router v7に、GraphQLサーバーを実装する方法を解説します。
 
-## 概要
+## 1️⃣ 概要
 
 ### 利用するライブラリの関係性と役割
 
@@ -31,15 +33,15 @@ React Router v7に、GraphQLサーバーを実装する方法を解説します�
    → クライアント側で GraphQL API にリクエストを送るためのライブラリ。  
    → **GraphQL Codegen** を使うと、型安全なリクエストコードを自動生成可能。  
 
-## 1️⃣ GraphQL Yogaセットアップ
+## 2️⃣ GraphQL Yogaセットアップ
 
-### 1.1 パッケージをインストール
+### 2.1 パッケージをインストール
 
 ```sh
 npm i graphql graphql-yoga
 ```
 
-### 1.2 GraphQLサーバーのエンドポイント作成
+### 2.2 GraphQLサーバーのエンドポイント作成
 
 ```ts: app/routes/api.graphql/route.ts
 import { createSchema, createYoga } from 'graphql-yoga';
@@ -89,11 +91,11 @@ npm run dev
 ブラウザから`localhost:xxxx/api/graphql`のエンドポイントを開く。
 ![image](https://storage.googleapis.com/zenn-user-upload/839312c715e9-20250225.png)
 
-## 2️⃣ POTHOS GraphQLセットアップ
+## 3️⃣ POTHOS GraphQLセットアップ
 
 GraphQLスキーマビルダーである、POTHOSをセットアップしていきます。
 
-### サンプルのモデル作成
+### 3.1 サンプルのモデル作成
 
 prismaスキーマに各モデルを追加します。
 
@@ -147,7 +149,7 @@ model User {
 }
 ```
 
-### パッケージのインストール
+### 3.2 パッケージのインストール
 
 ```sh
 npm i @pothos/core @pothos/plugin-prisma @pothos/plugin-relay @pothos/plugin-simple-objects @pothos/plugin-scope-auth graphql-scalars
@@ -168,7 +170,7 @@ npm i @pothos/core @pothos/plugin-prisma @pothos/plugin-relay @pothos/plugin-sim
 - **graphql-scalars**: `DateTime`型など、標準にはないスカラ型を利用でき、日時データを型安全に扱えます。
 :::
 
-### prisma.schemaにprisma-pothos-typesの設定を追加
+### 3.3 prisma.schemaにprisma-pothos-typesの設定を追加
 
 - prisma-pothos-types の設定を追加する。
 
@@ -184,7 +186,7 @@ generator pothos {
 npx prisma generate
 ```
 
-### スキーマビルダーを作成
+### 3.4 スキーマビルダーを作成
 
 コンテキストを準備する。  
 
@@ -254,7 +256,7 @@ builder.addScalarType('DateTime', DateTimeResolver, {});
 
 ```
 
-### Planetを実装
+### 3.5 Planetを実装
 
 #### Typeを作成
 
@@ -480,7 +482,7 @@ export const schema = builder.toSchema();
 
 ```
 
-### StarClusterを実装
+### 3.6 StarClusterを実装
 
 #### Typeを作成
 

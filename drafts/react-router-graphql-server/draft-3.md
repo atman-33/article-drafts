@@ -1,0 +1,244 @@
+### 3.8 GraphQL Yogaを変更
+
+:::message
+ここで利用する`context`のgetSessionは、下記の記事で定義した処理を利用していますので、参考に実装してみてください。
+
+<https://zenn.dev/atman/articles/5cd93410772d03>
+:::
+
+- 上記のschemaを反映
+- contextを実装
+
+```ts: app/routes/api.graphql/route.ts
++ import { createYoga } from 'graphql-yoga';
++ import { schema } from '~/.server/lib/graphql/schema';
++ import { getSession } from '~/sessions.server';
+import type { Route } from './+types/route';
+
+// NOTE: createYogaで生成したインスタンスはシングルトンとして利用される。
+const yoga = createYoga({
+  schema,
+  graphqlEndpoint: '/api/graphql', // GraphQL のエンドポイントを指定
++   context: async (ctx) => {
++     // ログイン中のユーザー取得
++     const session = await getSession(ctx.request.headers.get('Cookie'));
++     const user = session.get('user');
++     // console.log(user);
++     return { ...ctx, user };
+  },
+});
+
+export const loader = async ({ request, context }: Route.LoaderArgs) => {
+  const response = await yoga.handleRequest(request, context);
+  return new Response(response.body, response);
+};
+
+export const action = async ({ request, context }: Route.ActionArgs) => {
+  const response = await yoga.handleRequest(request, context);
+  return new Response(response.body, response);
+};
+
+```
+
+### 動作確認
+
+`npm run dev`でサーバーを起動後、`http://localhost:5173/api/graphql`にアクセスする。
+
+```graphql
+query getPlanets {
+  planets {
+    edges {
+      node {
+        id
+        name
+      }
+    }
+    totalCount
+  }
+}
+
+query getPlanet {
+  planet(args: { id: "UGxhbmV0OjExNjlhYTc5LTNlNDctNDk2ZS1hNWJhLWM1YzgzY2U5OThmMg==" }) {
+    id
+    name
+  }
+}
+
+mutation createPlanet {
+  createPlanet(input: {name: "earth"}) {
+    id
+  }
+}
+
+mutation updatePlanet {
+  updatePlanet(input: { id: "UGxhbmV0OmVlZmY4YzE0LWYxM2ItNDk5ZC1iNjNiLTM5ZGFjOTRmY2RhNw==", name: "New Earth" }) {
+    id
+    name
+  }
+}
+
+mutation deletePlanet {
+  deletePlanet(input: { id: "UGxhbmV0OmVlZmY4YzE0LWYxM2ItNDk5ZC1iNjNiLTM5ZGFjOTRmY2RhNw==" }) {
+    id
+    name
+  }
+}
+```
+
+```graphql
+query getStarClusters {
+  starClusters {
+    edges {
+      node {
+        id
+        name
+      }
+    }
+    totalCount
+  }
+}
+
+query getStarCluster {
+  starCluster(args: { id: "U3RhckNsdXN0ZXI6MmU2YWQ2MWMtZWI1ZC00NjQ1LWE2YjAtN2QyM2ZjNThmMjFk" }) {
+    id
+    name
+  }
+}
+
+mutation createStarCluster {
+  createStarCluster(input: { name: "Milky Way Cluster" }) {
+    id
+    name
+  }
+}
+
+mutation updateStarCluster {
+  updateStarCluster(input: { id: "U3RhckNsdXN0ZXI6MmU2YWQ2MWMtZWI1ZC00NjQ1LWE2YjAtN2QyM2ZjNThmMjFk", name: "Andromeda Cluster" }) {
+    id
+    name
+  }
+}
+
+mutation deleteStarCluster {
+  deleteStarCluster(input: { id: "U3RhckNsdXN0ZXI6MmU2YWQ2MWMtZWI1ZC00NjQ1LWE2YjAtN2QyM2ZjNThmMjFk" }) {
+    id
+    name
+  }
+}
+
+```
+
+### 補足. 認証によるアクセス制限の方法
+
+認証状況に応じてエラーを発生させる方法はいくつかあります。
+
+#### 方法1: Type定義のfieldsに制限を設定する
+
+下記のように、loggeInを設定しているので、
+
+```ts: app/.server/lib/graphql/builder.ts
+export const builder = new SchemaBuilder<{
+  // ...
+}>({
+  plugins: [
+    // ...
+  ],
+  scopeAuth: {
+    authorizeOnSubscribe: true,
+    authScopes: async (ctx) => ({
+      loggedIn: !!ctx.user,
+    }),
+  },
+```
+
+このように、Typeに指定することができる。
+
+```diff ts: app/.server/lib/graphql/modules/star-cluster/star-cluster.type.ts
+import { builder } from '../../builder';
+
+export const defineStarClusterType = () => {
+  builder.prismaNode('StarCluster', {
+    id: { field: 'id' },
+    findUnique: (id) => ({ id }),
+    fields: (t) => ({
++     name: t.exposeString('name', {authScopes: {loggedIn: true}}),
+      planets: t.relation('planets'),
+    }),
+  });
+};
+
+```
+
+この状態で、ログアウトした状態で、createStarClusterを試しに実行すると、
+
+```graphql
+mutation createStarCluster {
+  createStarCluster(input: { name: "Milky Way Cluster" }) {
+    id
+    name
+  }
+}
+```
+
+エラーが返ってきます。
+
+```json
+{
+  "errors": [
+    {
+      "message": "Unexpected error.",
+      "path": [
+        "createStarCluster",
+        "name"
+      ],
+      "extensions": {
+        "code": "INTERNAL_SERVER_ERROR",
+        "originalError": {
+          "message": "Not authorized to resolve StarCluster.name",...
+```
+
+#### 方法2: Resolverのctxを使って制限する
+
+例えば、`createStarCluster`のmutationに、ログインしていなければエラーを発生させます。
+
+```diff ts: app/.server/lib/graphql/modules/star-cluster/star-cluster.resolver.ts
+ builder.mutationField('createStarCluster', (t) =>
+    t.prismaField({
+      type: 'StarCluster',
+      nullable: false,
+      args: { input: t.arg({ type: CreateStarClusterInput, required: true }) },
+-     resolve: async (query, _parent, { input }, _ctx) => {
++     resolve: async (query, _parent, { input }, ctx) => {
++       if (!ctx.user) {
++         throw new Error('Unauthorized');
++       }
+
+        const createdStarCluster = await prisma.starCluster.create({
+```
+
+この状態で、ログアウトした状態で、createStarClusterを試しに実行すると、
+
+```graphql
+mutation createStarCluster {
+  createStarCluster(input: { name: "Milky Way Cluster" }) {
+    id
+    name
+  }
+}
+```
+
+エラーが返ってきます。
+
+```json
+{
+  "errors": [
+    {
+      "message": "Unexpected error.",
+      "path": [
+        "createStarCluster"
+      ],
+      "extensions": {
+        "code": "INTERNAL_SERVER_ERROR",
+        "originalError": {
+          "message": "Unauthorized",
+```
