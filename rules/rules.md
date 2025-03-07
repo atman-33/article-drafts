@@ -5,6 +5,10 @@
 - `drafts`フォルダ内のファイルのみ修正対象
 - それ以外のファイルは、記事の修正対象ではないため修正しないこと
 
+## 記事のMarkdown記法
+
+- [ZennのMarkdown記法一覧](https://zenn.dev/zenn/articles/markdown-guide)に記載されているルールに従うこと
+
 ## 修正に対するポイント
 
 - コードブロックの中身は変えないこと
