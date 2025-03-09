@@ -1,12 +1,15 @@
 # React Router v7 | GraphQLサーバー実装方法
 
-React Router v7に、GraphQLサーバーを実装する方法を解説します。
+本記事では、React Router v7とGraphQLを組み合わせて、Webアプリケーションを構築する方法を解説します。具体的には、GraphQL Yogaを用いたサーバーのセットアップから、Pothos GraphQLを使った型安全なスキーマの構築、さらにGraphQL Codegenを利用した型定義の自動生成まで、ステップバイステップで説明していきます。
+
+👇ソースコードはこちら
+@[card](https://github.com/atman-33/react-router-v7-boilerplate/tree/keep/graphql)
 
 ## 1️⃣ 概要
 
 ### 利用するライブラリの関係性と役割
 
-| ツール               | 役割・特徴 | どこで使うか |
+| ライブラリ               | 役割・特徴 | どこで使うか |
 |---------------------|----------|------------|
 | **GraphQL Yoga**   | GraphQL サーバーの実装。Fastify, Express などと統合可能 | **サーバー** |
 | **Pothos GraphQL** | TypeScript で型安全な GraphQL スキーマを構築できるスキーマビルダー | **サーバー** |
@@ -15,7 +18,7 @@ React Router v7に、GraphQLサーバーを実装する方法を解説します�
 
 ![image](https://storage.googleapis.com/zenn-user-upload/7a6ecbdde33c-20250307.png)
 
-### **関係性**
+以下、ライブラリの関係性について補足となります。
 
 1. **GraphQL YOGA**  
    → GraphQL サーバーを提供する。  
@@ -37,11 +40,15 @@ React Router v7に、GraphQLサーバーを実装する方法を解説します�
 
 ### 2.1 パッケージをインストール
 
+まずは必要なパッケージをインストールします。
+
 ```sh
 npm i graphql graphql-yoga
 ```
 
 ### 2.2 GraphQLサーバーのエンドポイント作成
+
+次に、GraphQLサーバーのエンドポイントを作成します。
 
 ```ts: app/routes/api.graphql/route.ts
 import { createSchema, createYoga } from 'graphql-yoga';
@@ -79,21 +86,21 @@ export const action = async ({ request, context }: Route.ActionArgs) => {
   const response = await yoga.handleRequest(request, context);
   return new Response(response.body, response);
 };
-
 ```
 
-Yoga GraphiQL にアクセスしてみる。  
+上記まで作成したら、 Yoga GraphiQL にアクセスしてみます。
 
 ```sh
 npm run dev
 ```
 
-ブラウザから`localhost:xxxx/api/graphql`のエンドポイントを開く。
+ブラウザから`localhost:xxxx/api/graphql`のエンドポイントを開き、以下のようなGraphiQL画面が表示されれば成功です。
+
 ![image](https://storage.googleapis.com/zenn-user-upload/839312c715e9-20250225.png)
 
 ## 3️⃣ POTHOS GraphQLセットアップ
 
-GraphQLスキーマビルダーである、POTHOSをセットアップしていきます。
+次は、GraphQLスキーマビルダーである、POTHOSをセットアップしていきます。
 
 ### 3.1 サンプルのモデル作成
 
@@ -149,7 +156,13 @@ model User {
 }
 ```
 
+今回のサンプルでは、Planet（惑星）とStarCluster（星団）が多対多の関係になっているため、中間テーブルも用意しています。
+サンプルはやや複雑な内容になっていますので、Planetだけでシンプルに実装してもよいです。
+その場合は、以降のコードもPlanetのみの実装に合わせて変更する必要がある点にご注意ください。
+
 ### 3.2 パッケージのインストール
+
+必要なパッケージをインストールします。
 
 ```sh
 npm i @pothos/core @pothos/plugin-prisma @pothos/plugin-relay @pothos/plugin-simple-objects @pothos/plugin-scope-auth graphql-scalars
@@ -172,7 +185,7 @@ npm i @pothos/core @pothos/plugin-prisma @pothos/plugin-relay @pothos/plugin-sim
 
 ### 3.3 prisma.schemaにprisma-pothos-typesの設定を追加
 
-- prisma-pothos-types の設定を追加する。
+prisma-pothos-types の設定を追加します。
 
 ```prisma: prisma/schema.prisma
 generator pothos {
@@ -180,15 +193,17 @@ generator pothos {
 }
 ```
 
-- 追加した設定を反映するために、`prisma generate`を実行しておく。
+追加した設定を反映するために、`prisma generate`を実行しておきます。
 
 ```sh
 npx prisma generate
 ```
 
+上記を実行するとPrismaクライアントが作成され、コード内でデータベースにアクセス可能となります。
+
 ### 3.4 スキーマビルダーを作成
 
-コンテキストを準備する。  
+コンテキストを準備します。このコンテキストには、認証後のユーザー情報が格納されます。
 
 ```ts: app/.server/lib/graphql/context.ts
 import type { User } from '@prisma/client';
@@ -197,10 +212,9 @@ import type { YogaInitialContext } from 'graphql-yoga';
 export interface Context extends YogaInitialContext {
   user?: User;
 }
-
 ```
 
-スキーマビルダーを準備する。
+スキーマビルダーを準備します。スキーマビルダーは、GraphQLスキーマを構築するためのライブラリであり、後で説明するクエリ、ミューテーションの定義にも利用します。
 
 ```ts: app/.server/lib/graphql/builder.ts
 import SchemaBuilder from '@pothos/core';
@@ -253,12 +267,15 @@ builder.queryType();
 builder.mutationType();
 
 builder.addScalarType('DateTime', DateTimeResolver, {});
-
 ```
 
 ### 3.5 Planetを実装
 
+ここからPlanetのGraphQLスキーマを定義していきます。
+
 #### Typeを作成
+
+まずはPlanetのTypeを作成します。
 
 ```ts: app/.server/lib/graphql/modules/planet/planet.type.ts
 import { builder } from '../../builder';
@@ -273,12 +290,11 @@ export const definePlanetType = () => {
     }),
   });
 };
-
 ```
 
 #### Dtoを作成
 
-argsとinputに分けて作成します。
+次にクエリやミューテーションで利用するDtoを定義します。今回はargs（Read系）とinput（Write系）に分けて作成しています。
 
 ```ts: app/.server/lib/graphql/modules/planet/dto/args/get-planet-args.dto.ts
 import { builder } from '~/.server/lib/graphql/builder';
@@ -288,7 +304,6 @@ export const GetPlanetArgs = builder.inputType('GetPlanetArgs', {
     id: t.string({ required: true }),
   }),
 });
-
 ```
 
 ```ts: app/.server/lib/graphql/modules/planet/dto/input/create-planet-input.dto.ts
@@ -300,7 +315,6 @@ export const CreatePlanetInput = builder.inputType('CreatePlanetInput', {
     starClusterIds: t.stringList({ required: false }),
   }),
 });
-
 ```
 
 ```ts: app/.server/lib/graphql/modules/planet/dto/input/update-planet-input.dto.ts
@@ -313,7 +327,6 @@ export const UpdatePlanetInput = builder.inputType('UpdatePlanetInput', {
     starClusterIds: t.stringList({ required: false }),
   }),
 });
-
 ```
 
 ```ts: app/.server/lib/graphql/modules/planet/dto/input/delete-planet-input.dto.ts
@@ -324,10 +337,11 @@ export const DeletePlanetInput = builder.inputType('DeletePlanetInput', {
     id: t.string({ required: true }),
   }),
 });
-
 ```
 
 #### Resolverを作成
+
+次に、PlanetのResolverを作成します。ここでクエリとミューテーションを定義します。
 
 ```ts: app/.server/lib/graphql/modules/planet/planet.resolver.ts
 import { decodeGlobalID } from '@pothos/plugin-relay';
@@ -453,10 +467,11 @@ export const definePlanetResolver = () => {
     }),
   );
 };
-
 ```
 
 #### Moduleを作成
+
+PlanetのModuleを作成します。Moduleでは、上記で作成したTypeとResolver定義を呼び出す役割としています。
 
 ```ts: app/.server/lib/graphql/modules/planet/planet.module.ts
 import { definePlanetResolver } from './planet.resolver';
@@ -467,10 +482,15 @@ export const setupPlanetModule = () => {
   definePlanetResolver();
   console.log('Planet module has been defined');
 };
-
 ```
 
+:::message
+ModuleはNestJSの構造を参考にしていますが、必須ではありません。重要なのは、builderからTypeとResolver（クエリやミューテーション）を定義できることです。
+:::
+
 #### schema.tsに反映
+
+以下のように、Moduleで定義した呼び出し関数を実行することで、schema.tsにTypeとResolverを反映させます。
 
 ```ts: app/.server/lib/graphql/schema.ts
 import { builder } from './builder';
@@ -479,10 +499,13 @@ import { setupPlanetModule } from './modules/planet/planet.module';
 setupPlanetModule();
 
 export const schema = builder.toSchema();
-
 ```
 
 ### 3.6 StarClusterを実装
+
+続いてStarClusterも実装していきます。繰り返しとなるため、説明は省略します。
+
+:::details コード
 
 #### Typeを作成
 
@@ -499,7 +522,6 @@ export const defineStarClusterType = () => {
     }),
   });
 };
-
 ```
 
 #### Dtoを作成
@@ -525,7 +547,6 @@ export const CreateStarClusterInput = builder.inputType(
     }),
   },
 );
-
 ```
 
 ```ts: app/.server/lib/graphql/modules/star-cluster/dto/input/update-star-cluster-input.dto.ts
@@ -540,7 +561,6 @@ export const UpdateStarClusterInput = builder.inputType(
     }),
   },
 );
-
 ```
 
 ```ts: app/.server/lib/graphql/modules/star-cluster/dto/input/delete-star-cluster-input.dto.ts
@@ -554,7 +574,6 @@ export const DeleteStarClusterInput = builder.inputType(
     }),
   },
 );
-
 ```
 
 #### Resolverを作成
@@ -662,7 +681,6 @@ export const setupStarClusterModule = () => {
   defineStarClusterResolver();
   console.log('StarCluster module has been defined');
 };
-
 ```
 
 #### schema.tsに反映
@@ -676,10 +694,15 @@ setupPlanetModule();
 + setupStarClusterModule();
 
 export const schema = builder.toSchema();
-
 ```
 
-### PlanetStarCluster(中間テーブル)を実装
+:::
+
+### 3.7 PlanetStarCluster(中間テーブル)を実装
+
+こちらも繰り返しとなるため、説明は省略します。
+
+:::details コード
 
 #### Typeを作成
 
@@ -695,7 +718,6 @@ export const definePlanetStarClusterType = () => {
     }),
   });
 };
-
 ```
 
 #### Moduleを作成
@@ -707,7 +729,6 @@ export const setupPlanetStarClusterModule = () => {
   definePlanetStarClusterType();
   console.log('PlanetStarCluster module has been defined');
 };
-
 ```
 
 #### schema.tsに反映
@@ -723,21 +744,24 @@ setupStarClusterModule();
 + setupPlanetStarClusterModule();
 
 export const schema = builder.toSchema();
-
 ```
 
-### GraphQL Yogaを変更
+:::
+
+### 3.8 GraphQL Yogaを変更
+
+今までの説明で作成した`schema`を、`GraphQL Yoga`に適用します。  
+ここでは、ユーザー認証を利用するために、`CookieSessionStorage`からユーザー情報を取得しています。
 
 :::message
 ここで利用する`context`のgetSessionは、下記の記事で定義した処理を利用していますので、参考に実装してみてください。
 
-<https://zenn.dev/atman/articles/5cd93410772d03>
+@[card](https://zenn.dev/atman/articles/5cd93410772d03)
+
+ユーザー認証も含めて実装すると大変になるため、もし認証を省略する場合は、ContextからUserを除くか、以降で扱う`user`を空で返すなどして対応してください。
 :::
 
-- 上記のschemaを反映
-- contextを実装
-
-```ts: app/routes/api.graphql/route.ts
+```diff ts: app/routes/api.graphql/route.ts
 + import { createYoga } from 'graphql-yoga';
 + import { schema } from '~/.server/lib/graphql/schema';
 + import { getSession } from '~/sessions.server';
@@ -765,96 +789,69 @@ export const action = async ({ request, context }: Route.ActionArgs) => {
   const response = await yoga.handleRequest(request, context);
   return new Response(response.body, response);
 };
-
 ```
 
-### 動作確認
+### 3.9 動作確認
 
-`npm run dev`でサーバーを起動後、`http://localhost:5173/api/graphql`にアクセスする。
+1. ターミナルで以下のコマンドを実行し、サーバーを起動します。
 
-```graphql
-query getPlanets {
-  planets {
-    edges {
-      node {
+    ```sh
+    npm run dev
+    ```
+
+2. ブラウザで以下のURLにアクセスし、GraphQLのエンドポイントが正しく動作しているか確認します。
+
+    ```sh
+    http://localhost:5173/api/graphql
+    ```
+
+3. 次のクエリやミューテーションを実行して、データの取得や更新ができるか確認してください。
+
+    ```graphql
+    query getPlanets {
+      planets {
+        edges {
+          node {
+            id
+            name
+          }
+        }
+        totalCount
+      }
+    }
+    
+    query getPlanet {
+      planet(args: { id: "xxx" }) {
         id
         name
       }
     }
-    totalCount
-  }
-}
-
-query getPlanet {
-  planet(args: { id: "UGxhbmV0OjExNjlhYTc5LTNlNDctNDk2ZS1hNWJhLWM1YzgzY2U5OThmMg==" }) {
-    id
-    name
-  }
-}
-
-mutation createPlanet {
-  createPlanet(input: {name: "earth"}) {
-    id
-  }
-}
-
-mutation updatePlanet {
-  updatePlanet(input: { id: "UGxhbmV0OmVlZmY4YzE0LWYxM2ItNDk5ZC1iNjNiLTM5ZGFjOTRmY2RhNw==", name: "New Earth" }) {
-    id
-    name
-  }
-}
-
-mutation deletePlanet {
-  deletePlanet(input: { id: "UGxhbmV0OmVlZmY4YzE0LWYxM2ItNDk5ZC1iNjNiLTM5ZGFjOTRmY2RhNw==" }) {
-    id
-    name
-  }
-}
-```
-
-```graphql
-query getStarClusters {
-  starClusters {
-    edges {
-      node {
+    
+    mutation createPlanet {
+      createPlanet(input: {name: "earth"}) {
+        id
+      }
+    }
+    
+    mutation updatePlanet {
+      updatePlanet(input: { id: "xxx", name: "New Earth" }) {
         id
         name
       }
     }
-    totalCount
-  }
-}
+    
+    mutation deletePlanet {
+      deletePlanet(input: { id: "xxx" }) {
+        id
+        name
+      }
+    }
+    ```
 
-query getStarCluster {
-  starCluster(args: { id: "U3RhckNsdXN0ZXI6MmU2YWQ2MWMtZWI1ZC00NjQ1LWE2YjAtN2QyM2ZjNThmMjFk" }) {
-    id
-    name
-  }
-}
+上記の`{ id: "xxx" }`の`xxx`は参考です。実際は、生成されたレコードのIDを指定してください。
+GraphiQLの扱い方は省略しますが、正常にクエリが実行できれば以下のように結果が表示されます。
 
-mutation createStarCluster {
-  createStarCluster(input: { name: "Milky Way Cluster" }) {
-    id
-    name
-  }
-}
-
-mutation updateStarCluster {
-  updateStarCluster(input: { id: "U3RhckNsdXN0ZXI6MmU2YWQ2MWMtZWI1ZC00NjQ1LWE2YjAtN2QyM2ZjNThmMjFk", name: "Andromeda Cluster" }) {
-    id
-    name
-  }
-}
-
-mutation deleteStarCluster {
-  deleteStarCluster(input: { id: "U3RhckNsdXN0ZXI6MmU2YWQ2MWMtZWI1ZC00NjQ1LWE2YjAtN2QyM2ZjNThmMjFk" }) {
-    id
-    name
-  }
-}
-
-```
+![image](https://storage.googleapis.com/zenn-user-upload/c58266d66136-20250309.png)
 
 ### 補足. 認証によるアクセス制限の方法
 
@@ -862,7 +859,7 @@ mutation deleteStarCluster {
 
 #### 方法1: Type定義のfieldsに制限を設定する
 
-下記のように、loggeInを設定しているので、
+今回は、下記のように`loggedIn`というスコープを設定していますので、
 
 ```ts: app/.server/lib/graphql/builder.ts
 export const builder = new SchemaBuilder<{
@@ -879,7 +876,7 @@ export const builder = new SchemaBuilder<{
   },
 ```
 
-このように、Typeに指定することができる。
+以下のように、Typeにスコープを設定することができます（例では`name`に`loggedIn`を設定）。
 
 ```diff ts: app/.server/lib/graphql/modules/star-cluster/star-cluster.type.ts
 import { builder } from '../../builder';
@@ -894,10 +891,9 @@ export const defineStarClusterType = () => {
     }),
   });
 };
-
 ```
 
-この状態で、ログアウトした状態で、createStarClusterを試しに実行すると、
+この状態で、ログアウトしたまま`createStarCluster`を試しに実行すると、
 
 ```graphql
 mutation createStarCluster {
@@ -908,7 +904,7 @@ mutation createStarCluster {
 }
 ```
 
-エラーが返ってきます。
+エラーが返ってきます。これは、ログインしていない状態で`createStarCluster`を実行したため、`StarCluster.name`の取得が認証エラーとしてブロックされたためです。
 
 ```json
 {
@@ -927,6 +923,7 @@ mutation createStarCluster {
 
 #### 方法2: Resolverのctxを使って制限する
 
+他には、Resolverのクエリ・ミューテーション定義内でアクセス制限を実装する方法もあります。
 例えば、`createStarCluster`のmutationに、ログインしていなければエラーを発生させます。
 
 ```diff ts: app/.server/lib/graphql/modules/star-cluster/star-cluster.resolver.ts
@@ -944,7 +941,7 @@ mutation createStarCluster {
         const createdStarCluster = await prisma.starCluster.create({
 ```
 
-この状態で、ログアウトした状態で、createStarClusterを試しに実行すると、
+この状態で、ログアウトしたままcreateStarClusterを試しに実行すると、
 
 ```graphql
 mutation createStarCluster {
@@ -971,11 +968,13 @@ mutation createStarCluster {
           "message": "Unauthorized",
 ```
 
-## 3️⃣ GraphQL codegen セットアップ
+## 4️⃣ GraphQL codegen セットアップ
 
-### GraphQL スキーマファイル出力機能を追加
+ここでは、GraphQL codegenを利用するための設定を追加していきます。
 
-- GraphQLスキーマ出力処理を追加する。
+### 4.1 GraphQL スキーマファイル出力機能を追加
+
+まずはGraphQLスキーマ出力処理を追加します。
 
 ```ts: tools/graphql-codegen/export-schema.ts
 import fs from 'node:fs';
@@ -994,19 +993,23 @@ const main = async () => {
 main();
 ```
 
-- package.json にスクリプトを追加する。
+package.json にスクリプトを追加します。
 
 ```json: package.json
   "scripts": {
     // ...
     "--- GRAPHQL SECTION ---": "--- --- --- --- ---",
     "graphql:schema": "npx tsx ./tools/graphql-codegen/export-schema.ts",
+    // ...
+  }
 ```
 
 これを実行すると、`schema.graphql`というファイルが生成されます。
 graphql-codegenでは、このスキーマを読み込んで、ファイルを自動生成するようにします。
 
-### graphql-codegenインストール
+### 4.2 graphql-codegenインストール
+
+以下のコマンドを実行して、必要なパッケージをインストールします。
 
 ```sh
 npm i graphql
@@ -1014,9 +1017,9 @@ npm i -D typescript @graphql-codegen/cli @graphql-codegen/client-preset
 npm i -D @parcel/watcher
 ```
 
-`@parcel/watcher`はwatchモードを利用する際に必要となる。
+`@parcel/watcher`はwatchモードを利用する際に必要となります（watchモードは後述）。
 
-### codegen configファイルを作成
+### 4.3 codegen configファイルを作成
 
 ```ts: tools/graphql-codegen/codegen.ts
 import type { CodegenConfig } from '@graphql-codegen/cli';
@@ -1043,24 +1046,35 @@ export default config;
 
 自動生成されたファイルをそのまま利用するとエラーになるので、`hooks: { afterAllFileWrite: ['biome check --write'] }`でフォーマットするようにしています。
 
-### package.jsonにスクリプトを追加
+:::message
+現在はBiomeでのフォーマットを紹介していますが、ESLintでも代用できます。最悪の場合、ファイルが自動生成された後に手動修正でも問題ありません。
+
+もしBiomeを利用する場合は、以下の設定方法を参考にしてください。
+@[card](https://zenn.dev/atman/books/b060a0ba47af8c/viewer/3dafd3)
+:::
+
+### 4.4 package.jsonにスクリプトを追加
 
 ```json: package.json
   "scripts": {
     // ...
     "graphql:codegen": "graphql-codegen -c tools/graphql-codegen/codegen.ts",
     "graphql:codegen-watch": "graphql-codegen -c tools/graphql-codegen/codegen.ts --watch",
+    // ...
+  }
 ```
 
-このスクリプトを実行すると、GraphQLの型生成に必要なファイルが自動生成されます。
+2つスクリプトを追加していますが、`--watch`オプションを付きのスクリプトを実行すると、ファイルが変更されるたびに自動で型生成を再実行するようになります。
+
+どちらのスクリプトでもよいので、実行するとGraphQLの型生成に必要なファイルが自動生成されます。
 ![image](https://storage.googleapis.com/zenn-user-upload/d9784a29eec2-20250305.png)
 
-:::details 補足. 自動生成ファイルのLintエラー無視
+:::details 自動生成ファイルのLintエラー無視（biome.json）
 
-自動生成ファイルに対して、Lintエラーは無視するように設定しておきます。
-ここでは、Biomeの場合の設定を参考に記載しておきます。
+自動生成ファイルに対して、Lintエラーは無視するように設定しておきます。ここでは、Biomeの場合の設定を参考に記載しておきます。
+自動生成されたファイルでは`any`を利用していますので、警告を無視するように設定しておきました。
 
-```diff biome.json
+```diff json: biome.json
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "vcs": {
@@ -1123,19 +1137,23 @@ export default config;
 }
 ```
 
-自動生成されたファイルでは`any`を利用していますので、警告を無視するように設定しておきます。
-
 :::
 
-## 4️⃣ graphql-request セットアップ
+## 5️⃣ graphql-request セットアップ
 
-### パッケージをインストール
+ここからは、クライアント側から GraphQL API にリクエストを送るための実装を進めていきます。
+
+### 5.1 パッケージをインストール
+
+まずは必要なパッケージをインストールします。
 
 ```sh
 npm i graphql-request
 ```
 
-### GraphQL API URLを環境変数に追加
+### 5.2 GraphQL API URLを環境変数に追加
+
+次に、GraphQLサーバーのAPIエンドポイントを環境変数から取得できるようにしておきます。
 
 ```sh: .env
 # API GraphQL URL
@@ -1149,7 +1167,9 @@ export const env = {
 };
 ```
 
-### GraphQL Clientを作成
+### 5.3 GraphQL Clientを作成
+
+クライアント側でGraphQLを扱うための処理を作成します。
 
 ```ts: app/lib/graphql-client/index.ts
 import { ClientError, GraphQLClient } from 'graphql-request';
@@ -1222,11 +1242,22 @@ export const getOriginalErrorMessage = (error: ClientError): string | null => {
 
 ```
 
-## 5 動作確認
+これでクライアント側でGraphQLを扱う準備は完了です！
+残りは動作確認となりますので、もう少しです。
 
-### データ取得用のGraphQLを作成
+## 6️⃣ 動作確認
+
+実際にGraphQLのデータを取得して表示させるデモページを作成してみます。
+
+### 6.1 データ取得用のGraphQLを作成
+
+今回の`graphql-codegen`の設定により、`app`フォルダ内の**ts**や**tsx**ファイルにGraphQL文が含まれている場合、それらが**codegen**の自動生成対象となります。
+
+まずは、`getPlanets`という関数を作成してみましょう。
 
 ```tsx: app/routes/__.demo.graphql._index/route.tsx
+import { graphql } from '~/.server/lib/graphql/@generated';
+
 const getPlanets = graphql(`
 query getPlanets {
   planets {
@@ -1242,25 +1273,24 @@ query getPlanets {
 `);
 ```
 
-### graphql-codegenを実行
+この時点では、上記の`graphql(...`の部分がエラーとなっているはずです。
+
+### 6.2 graphql-codegenを実行
+
+コード生成のコマンドを実行します。
 
 ```sh
 npm run graphql:codegen
 ```
 
-### ページを作成
+コマンドを実行後、`graphql(...`の参照先にコードが自動生成されるため、エラーがなくなっていれば成功です。
+
+### 6.3 デモページを作成
+
+最後にデモページを作成して完了です！
 
 ```tsx: app/routes/__.demo.graphql._index/route.tsx
 import { graphql } from '~/.server/lib/graphql/@generated';
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '~/components/shadcn/ui/table';
 import {
   getOriginalErrorMessage,
   initializeClient,
@@ -1301,23 +1331,16 @@ const DemoGraphqlPage = ({ loaderData }: Route.ComponentProps) => {
 
   return (
     <>
-      <Table>
-        <TableCaption>A list of planets</TableCaption>
-        <TableHeader>
-          <TableRow>
-            <TableHead>ID</TableHead>
-            <TableHead>Name</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
+      <div>
+        <h2>A list of planets</h2>
+        <ul>
           {planets?.map((planet) => (
-            <TableRow key={planet?.node?.id}>
-              <TableCell>{planet?.node?.id}</TableCell>
-              <TableCell>{planet?.node?.name}</TableCell>
-            </TableRow>
+            <li key={planet?.node?.id}>
+              {planet?.node?.id} 👉 {planet?.node?.name}
+            </li>
           ))}
-        </TableBody>
-      </Table>
+        </ul>
+      </div>
     </>
   );
 };
@@ -1325,37 +1348,45 @@ const DemoGraphqlPage = ({ loaderData }: Route.ComponentProps) => {
 export default DemoGraphqlPage;
 ```
 
-完成画面
-![image](https://storage.googleapis.com/zenn-user-upload/4250017e8dd2-20250306.png)
+👇完成画面
+![image](https://storage.googleapis.com/zenn-user-upload/72c206a75d42-20250309.png)
+
+上記のデモページでは、データ取得のみの機能が実装されています。もしデータの作成や更新機能を追加したい場合は、同じようにGraphQL文を作成し、自動コード生成を行い、画面ページを作成してみてください。
+
+長い記事となってしまいましたが、こちらで実装は完了です！ここまで読んで頂き、ありがとうございました🎉
 
 ## 補足
 
-### DBテーブル更新時の改修手順の流れ
+### DBテーブル更新時の改修手順
 
-1. `schema.prisma`を更新
-2. prisma migrate を実行
-3. prisma generate を実行
+これまでの作成ステップは、初回のセットアップの場合に該当しますが、実際にはテーブルの追加や変更、スキーマの追加を繰り返すことが多いです。
+
+その場合は、以下のような手順になります。
+
+1. `schema.prisma`を更新 - DBのテーブルやフィールドを変更
+2. prisma migrate を実行 - DBスキーマを反映
+3. prisma generate を実行 - Prismaクライアントを再生成
 4. GraphQL Pothosのスキーマを追加
    - タイプを追加
    - DTOを追加
-   - リゾルバ（Query, Mutation）を追加
+   - Query/Mutationのリゾルバを追加
    - モジュール（Type、Resolver定義処理実行）を追加
    - `schema.ts`にモジュール呼び出しを追加
-5. `npm run graphql:schema`で、スキーマファイルをエクスポート
-6. tsファイルに、GraphQLを記載
+5. `npm run graphql:schema`でスキーマファイルをエクスポート
+6. tsファイルに、GraphQLのリクエスト文を記載
 7. `graphql:codegen`で、型生成を自動生成
 
 ### GraphQLフォルダ構造
 
-今回のGraphQLフォルダ構造は、NestJSのモジュール設計を参考にしています。
+今回のGraphQLフォルダ構造は、NestJSのモジュール設計を参考にしています。ただし、これはあくまで一つの例であり、正解はありません。
+そのため、自分に合ったフォルダ構造を考えて作成して頂ければと思います。
 
-#### モジュール管理のポイント
+#### フォルダ構造
 
+**ポイント**
 ✅ **エンティティごとに分離** → 拡張性が高く、新規追加が容易  
 ✅ **DTO, モデル, リゾルバを整理** → 規模が大きくなってもメンテしやすい  
 ✅ **モジュールのエントリーポイントを統一** → 各エンティティのスキーマ定義を明確にし、依存関係を整理しやすくする
-
-#### フォルダ構造
 
 ```text
 app/
